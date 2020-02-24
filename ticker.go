@@ -39,28 +39,30 @@ func (ft *fakeTicker) Stop() {
 // not have enough capacity.
 func (ft *fakeTicker) tick() {
 	tick := ft.clock.Now()
-	for {
-		tick = tick.Add(ft.period)
-		remaining := tick.Sub(ft.clock.Now())
-		if remaining <= 0 {
-			// The tick should have already happened. This can happen when
-			// Advance() is called on the fake clock with a duration larger
-			// than this ticker's period.
-			select {
-			case ft.c <- tick:
-			default:
+	go func() {
+		for {
+			tick = tick.Add(ft.period)
+			remaining := tick.Sub(ft.clock.Now())
+			if remaining <= 0 {
+				// The tick should have already happened. This can happen when
+				// Advance() is called on the fake clock with a duration larger
+				// than this ticker's period.
+				select {
+				case ft.c <- tick:
+				default:
+				}
+				continue
 			}
-			continue
-		}
 
-		select {
-		case <-ft.stop:
-			return
-		case <-ft.clock.After(remaining):
 			select {
-			case ft.c <- tick:
-			default:
+			case <-ft.stop:
+				return
+			case <-ft.clock.After(remaining):
+				select {
+				case ft.c <- tick:
+				default:
+				}
 			}
 		}
-	}
+	}()
 }

@@ -2,6 +2,7 @@ package clockwork
 
 import (
 	"testing"
+	"time"
 )
 
 func TestFakeTickerStop(t *testing.T) {
@@ -55,4 +56,24 @@ func TestFakeTickerTick(t *testing.T) {
 		t.Errorf("expected tick!")
 	}
 	ft.Stop()
+}
+
+func TestFakeTicker_Race(t *testing.T) {
+	fc := NewFakeClock()
+
+	tickTime := 1 * time.Millisecond
+	ticker := fc.NewTicker(tickTime)
+	defer ticker.Stop()
+
+	fc.Advance(tickTime)
+
+	timeout := time.NewTimer(2 * time.Second)
+	defer timeout.Stop()
+
+	select {
+	case <-ticker.Chan():
+		// Pass
+	case <-timeout.C:
+		t.Fatalf("Ticker didn't detect the clock advance!")
+	}
 }
