@@ -22,6 +22,19 @@ type FakeClock interface {
 	// Advance advances the FakeClock to a new point in time, ensuring any existing
 	// sleepers are notified appropriately before returning
 	Advance(d time.Duration)
+
+	// AdvanceTo advances the FakeClock to a new point in time, where the time
+	// is specified directly. Returns false if the specified time has allready
+	// passed.
+	AdvanceTo(t time.Time) bool
+
+	// NextWakeup returns the earliest time from now that a blocker would
+	// wait up. Returns a Zero time if there are no more blockers.
+	//
+	// This can be used with Advance to wake subsequent blockers no matter
+	// what time they are blocked on.
+	NextWakeup() time.Time
+
 	// BlockUntil will block until the FakeClock has the given number of
 	// sleepers (callers of Sleep or After)
 	BlockUntil(n int)
@@ -156,12 +169,7 @@ func (fc *fakeClock) NewTicker(d time.Duration) Ticker {
 	return ft
 }
 
-// Advance advances fakeClock to a new point in time, ensuring channels from any
-// previous invocations of After are notified appropriately before returning
-func (fc *fakeClock) Advance(d time.Duration) {
-	fc.l.Lock()
-	defer fc.l.Unlock()
-	end := fc.time.Add(d)
+func (fc *fakeClock) advanceTo(end time.Time) {
 	var newSleepers []*sleeper
 	for _, s := range fc.sleepers {
 		if end.Sub(s.until) >= 0 {
@@ -173,6 +181,25 @@ func (fc *fakeClock) Advance(d time.Duration) {
 	fc.sleepers = newSleepers
 	fc.blockers = notifyBlockers(fc.blockers, len(fc.sleepers))
 	fc.time = end
+}
+
+// Advance advances fakeClock to a new point in time, ensuring channels from any
+// previous invocations of After are notified appropriately before returning
+func (fc *fakeClock) Advance(d time.Duration) {
+	fc.l.Lock()
+	defer fc.l.Unlock()
+	end := fc.time.Add(d)
+	fc.advanceTo(end)
+}
+
+func (fc *fakeClock) AdvanceTo(end time.Time) bool {
+	fc.l.Lock()
+	defer fc.l.Unlock()
+	if fc.time.After(end) {
+		return false
+	}
+	fc.advanceTo(end)
+	return true
 }
 
 // BlockUntil will block until the fakeClock has the given number of sleepers
@@ -192,4 +219,18 @@ func (fc *fakeClock) BlockUntil(n int) {
 	fc.blockers = append(fc.blockers, b)
 	fc.l.Unlock()
 	<-b.ch
+}
+
+func (fc *fakeClock) NextWakeup() time.Time {
+	fc.l.Lock()
+	defer fc.l.Unlock()
+
+	var end time.Time
+	for i, s := range fc.sleepers {
+		if i == 0 || s.until.Before(end) {
+			end = s.until
+		}
+	}
+
+	return end
 }

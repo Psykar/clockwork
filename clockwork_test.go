@@ -137,3 +137,32 @@ func TestFakeClockSince(t *testing.T) {
 		t.Fatalf("fakeClock.Since() returned unexpected duration, got: %d, want: %d", fc.Since(now), elapsedTime)
 	}
 }
+
+func TestFakeClockWakeup(t *testing.T) {
+	fc := NewFakeClock()
+
+	if next := fc.NextWakeup(); !next.IsZero() {
+		t.Fatalf("fakeClock.NextWakeup returned an unexpected value: %s", next)
+	}
+
+	_ = fc.After(1 * time.Hour)
+	next := fc.NextWakeup()
+	if got, expected := next.Sub(fc.Now()), 1*time.Hour; got != expected {
+		t.Fatalf("fakeClock.NextWakeup returned %s, expected %s", got, expected)
+	}
+
+	_ = fc.After(20 * time.Minute)
+	next = fc.NextWakeup()
+	if got, expected := next.Sub(fc.Now()), 20*time.Minute; got != expected {
+		t.Fatalf("fakeClock.NextWakeup returned %s, expected %s", got, expected)
+	}
+
+	if ok := fc.AdvanceTo(next); !ok {
+		t.Fatalf("fakeClock.AdvanceTo failed")
+	}
+
+	next = fc.NextWakeup()
+	if got, expected := next.Sub(fc.Now()), 40*time.Minute; got != expected {
+		t.Fatalf("fakeClock.NextWakeup returned %s, expected %s", got, expected)
+	}
+}
