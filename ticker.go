@@ -42,24 +42,15 @@ func (ft *fakeTicker) tick() {
 	go func() {
 		for {
 			tick = tick.Add(ft.period)
-			remaining := tick.Sub(ft.clock.Now())
-			if remaining <= 0 {
-				// The tick should have already happened. This can happen when
-				// Advance() is called on the fake clock with a duration larger
-				// than this ticker's period.
-				select {
-				case ft.c <- tick:
-				default:
-				}
-				continue
-			}
 
 			select {
 			case <-ft.stop:
 				return
-			case <-ft.clock.After(remaining):
+			case t := <-ft.clock.At(tick):
+				// Non-blocking send. Drop ticks rather than blocking.
 				select {
-				case ft.c <- tick:
+				// time.Ticker docs say this returns the current time.
+				case ft.c <- t:
 				default:
 				}
 			}

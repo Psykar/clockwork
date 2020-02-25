@@ -24,7 +24,7 @@ func TestFakeTickerTick(t *testing.T) {
 	// The tick at now.Add(2) should not get through since we advance time by
 	// two units below and the channel can hold at most one tick until it's
 	// consumed.
-	first := now.Add(1)
+	first := now.Add(2)
 	second := now.Add(3)
 
 	// We wrap the Advance() calls with blockers to make sure that the ticker
@@ -36,6 +36,7 @@ func TestFakeTickerTick(t *testing.T) {
 
 	select {
 	case tick := <-ft.Chan():
+		// Returned time is the current time, not the time the tick occurred.
 		if tick != first {
 			t.Errorf("wrong tick time, got: %v, want: %v", tick, first)
 		}

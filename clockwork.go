@@ -1,6 +1,7 @@
 package clockwork
 
 import (
+	"errors"
 	"sync"
 	"time"
 )
@@ -9,6 +10,8 @@ import (
 // using the time module, so that chronology-related behavior can be tested
 type Clock interface {
 	After(d time.Duration) <-chan time.Time
+	At(t time.Time) <-chan time.Time
+
 	Sleep(d time.Duration)
 	Now() time.Time
 	Since(t time.Time) time.Duration
@@ -75,6 +78,10 @@ func (rc *realClock) Sleep(d time.Duration) {
 	time.Sleep(d)
 }
 
+func (rc *realClock) At(t time.Time) <-chan time.Time {
+	return time.After(time.Until(t))
+}
+
 func (rc *realClock) Now() time.Time {
 	return time.Now()
 }
@@ -120,25 +127,29 @@ func (fc *fakeClock) NumSleepCalls() int64 {
 // After mimics time.After; it waits for the given duration to elapse on the
 // fakeClock, then sends the current time on the returned channel.
 func (fc *fakeClock) After(d time.Duration) <-chan time.Time {
+	t := fc.Now().Add(d)
+	return fc.At(t)
+}
+
+func (fc *fakeClock) At(t time.Time) <-chan time.Time {
 	fc.l.Lock()
-	defer fc.l.Unlock()
 
 	fc.updates++
-	now := fc.time
 	done := make(chan time.Time, 1)
-	if d.Nanoseconds() <= 0 {
-		// special case - trigger immediately
-		done <- now
+
+	if !fc.time.Before(t) {
+		// Trigger immediately.
+		done <- fc.time
 	} else {
-		// otherwise, add to the set of sleepers
 		s := &sleeper{
-			until: now.Add(d),
+			until: t,
 			done:  done,
 		}
 		fc.sleepers = append(fc.sleepers, s)
-		// and notify any blockers
 		fc.blockers = notifyBlockers(fc.blockers, len(fc.sleepers))
 	}
+
+	fc.l.Unlock()
 	return done
 }
 
@@ -175,6 +186,12 @@ func (fc *fakeClock) Since(t time.Time) time.Duration {
 }
 
 func (fc *fakeClock) NewTicker(d time.Duration) Ticker {
+	if d <= 0 {
+		// Match behavior of time.NewTicker, so there are no surprises when
+		// moving from fake clock to real clock.
+		panic(errors.New("non-positive interval for NewTicker"))
+	}
+
 	ft := &fakeTicker{
 		c:      make(chan time.Time, 1),
 		stop:   make(chan bool, 1),
