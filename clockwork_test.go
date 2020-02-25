@@ -9,12 +9,21 @@ import (
 func TestFakeClockAfter(t *testing.T) {
 	fc := &fakeClock{}
 
+	if got, expected := fc.NumSleepCalls(), int64(0); got != expected {
+		t.Errorf("expected %d sleep calls, got %d", got, expected)
+	}
+
 	zero := fc.After(0)
 	select {
 	case <-zero:
 	default:
 		t.Errorf("zero did not return!")
 	}
+
+	if got, expected := fc.NumSleepCalls(), int64(1); got != expected {
+		t.Errorf("expected %d sleep calls, got %d", got, expected)
+	}
+
 	one := fc.After(1)
 	two := fc.After(2)
 	six := fc.After(6)

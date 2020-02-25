@@ -38,6 +38,10 @@ type FakeClock interface {
 	// BlockUntil will block until the FakeClock has the given number of
 	// sleepers (callers of Sleep or After)
 	BlockUntil(n int)
+
+	// NumSleepCalls returns the number of calls to a blocking sleep function
+	// (Sleep and After).
+	NumSleepCalls() int64
 }
 
 // NewRealClock returns a Clock which simply delegates calls to the actual time
@@ -87,6 +91,7 @@ type fakeClock struct {
 	sleepers []*sleeper
 	blockers []*blocker
 	time     time.Time
+	updates  int64
 
 	l sync.RWMutex
 }
@@ -103,11 +108,22 @@ type blocker struct {
 	ch    chan struct{}
 }
 
+// NumSleepCalls returns the number of times that a blocking sleep function has
+// been called (such as Sleep or After).
+func (fc *fakeClock) NumSleepCalls() int64 {
+	fc.l.RLock()
+	n := fc.updates
+	fc.l.RUnlock()
+	return n
+}
+
 // After mimics time.After; it waits for the given duration to elapse on the
 // fakeClock, then sends the current time on the returned channel.
 func (fc *fakeClock) After(d time.Duration) <-chan time.Time {
 	fc.l.Lock()
 	defer fc.l.Unlock()
+
+	fc.updates++
 	now := fc.time
 	done := make(chan time.Time, 1)
 	if d.Nanoseconds() <= 0 {
@@ -170,6 +186,7 @@ func (fc *fakeClock) NewTicker(d time.Duration) Ticker {
 }
 
 func (fc *fakeClock) advanceTo(end time.Time) {
+	fc.updates++
 	var newSleepers []*sleeper
 	for _, s := range fc.sleepers {
 		if end.Sub(s.until) >= 0 {
