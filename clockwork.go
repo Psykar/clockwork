@@ -137,7 +137,7 @@ func (fc *fakeClock) At(t time.Time) <-chan time.Time {
 	fc.updates++
 	done := make(chan time.Time, 1)
 
-	if !fc.time.Before(t) {
+	if !t.After(fc.time) {
 		// Trigger immediately.
 		done <- fc.time
 	} else {
