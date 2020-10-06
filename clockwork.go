@@ -45,6 +45,9 @@ type FakeClock interface {
 	// NumSleepCalls returns the number of calls to a blocking sleep function
 	// (Sleep and After).
 	NumSleepCalls() int64
+
+	// NumBlocking
+	NumBlocking() int
 }
 
 // NewRealClock returns a Clock which simply delegates calls to the actual time
@@ -253,6 +256,12 @@ func (fc *fakeClock) BlockUntil(n int) {
 	fc.blockers = append(fc.blockers, b)
 	fc.l.Unlock()
 	<-b.ch
+}
+
+func (fc *fakeClock) NumBlocking() int {
+	fc.l.RLock()
+	defer fc.l.RUnlock()
+	return len(fc.sleepers)
 }
 
 func (fc *fakeClock) NextWakeup() time.Time {
